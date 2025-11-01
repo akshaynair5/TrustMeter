@@ -164,156 +164,90 @@ def detect_image():
 # TEXT DETECTION 
 # ---------------------------
 @app.route("/detect_text", methods=["POST"])
-@limiter.limit("30 per minute") 
+@limiter.limit("30 per minute")
 def detect_text():
     try:
-        data = request.json 
+        data = request.json
         original_text = data.get("text", "")
         url = data.get("url", "")
 
         session_id = get_session_id()
         print(f"Processing request for session: {session_id}")
-        
-        print(f"User selected text: '{original_text}' - \n")
-        print(f"URL IS  '{url}'- \n")
+        print(f"User selected text: '{original_text}'")
+        print(f"URL: {url}")
 
-                # Translate to English if needed
+        # ✅ Translate to English if needed
         try:
             translation_result = translate_to_english(original_text)
-            text_for_analysis = translation_result['translated_text']
-            detected_language = translation_result['detected_language']
-            was_translated = translation_result['was_translated']
-    
+            text_for_analysis = translation_result["translated_text"]
         except Exception as e:
             print(f"Translation error: {e}")
-            return jsonify({"error": "Failed to translate text. Please try again."}), 500
-        
+            return jsonify({"error": "Failed to translate text"}), 500
+
         text = text_for_analysis.strip()
-        print(f'Translated text ' , text)
         if not text or len(text) < 5:
-            return jsonify({"error": "Text too short or missing"}), 400
+            return jsonify({"error": "Text too short"}), 400
 
         article_id = generate_id(url, text)
-
         norm_id = generate_normalized_id(url, text)
-        print(f"Exact ID: {article_id}, Norm ID: {norm_id}")
 
+        # ✅ Firestore exact match
         cached = get_article_doc(article_id)
         if cached:
-            prediction = cached.get("prediction", "Unknown")
-            explanation = cached.get("gemini_reasoning", cached.get("text_explanation", ""))
             return jsonify({
                 "score": cached.get("text_score", 0.5),
-                "prediction": prediction,
-                "explanation": explanation,
+                "prediction": cached.get("prediction", "Unknown"),
+                "explanation": cached.get("text_explanation", ""),
                 "article_id": article_id,
                 "source": "firestore_exact",
-                "session_id": session_id,  
+                "session_id": session_id,
                 "details": [{
                     "score": cached.get("text_score", 0.5),
-                    "prediction": prediction,
-                    "explanation": explanation,
+                    "prediction": cached.get("prediction", "Unknown"),
+                    "explanation": cached.get("text_explanation", ""),
                     "source": "firestore_exact",
                     "article_id": article_id
                 }]
             })
 
-        print("Exact miss; trying Firestore semantic search...")
+        # ✅ Firestore semantic search
         firestore_semantic = firestore_semantic_search(original_text)
         if firestore_semantic:
-            best = firestore_semantic['best']
-            best_article_id = firestore_semantic['best_id']
-            prediction = best.get("prediction", "Unknown")
-            explanation = best.get("gemini_reasoning", best.get("text_explanation", ""))
-            print(f"Semantic hit! Using candidate with sim {firestore_semantic['similarity']:.3f}, score {best.get('text_score', 0.5)}")
-            
-            db.collection('articles').document(best_article_id).update({"total_views": firestore.Increment(1)})
-            if firestore_semantic['similarity'] < 0.95:
-                from misinfo_model import ask_gemini_structured
-                personalization_prompt = f"""
-                Original: "{original_text}"
-                Similar cached: "{best.get('text', '')}", score={best.get('text_score', 0.5)}, pred={prediction}, exp="{explanation}"
-                Personalize JSON: {{"score":<0-1>, "prediction":"Fake"/"Real", "explanation":"<reasoning>"}}
-                """
-                try:
-                    gemini_resp = ask_gemini_structured(personalization_prompt)
-                    if isinstance(gemini_resp, dict) and 'parsed' in gemini_resp:
-                        pers = gemini_resp['parsed']
-                        explanation = pers.get("explanation", explanation)
-                        embedding = generate_embedding(original_text)
-                        db.collection('articles').document(article_id).set({
-                            "url": url, "text": original_text, "normalized_id": norm_id, "embedding": embedding,
-                            "text_score": pers.get("score", best.get("text_score", 0.5)),
-                            "prediction": pers.get("prediction", prediction),
-                            "gemini_reasoning": explanation, "text_explanation": explanation,
-                            "total_views": 1, "total_reports": 1 if pers.get("score", 0.5) < 0.5 else 0,
-                            "last_updated": datetime.utcnow(), "type": "text", "verified": True
-                        })
-                        store_feedback(original_text, explanation, [], "system", article_id=article_id, score=pers.get("score", 0.5), prediction=pers.get("prediction", prediction), verified=True)
-                        prediction = pers.get("prediction", prediction)
-                except Exception as e:
-                    print(f"Personalization err: {e}")
-            
+            best = firestore_semantic["best"]
+            best_id = firestore_semantic["best_id"]
+
             return jsonify({
                 "score": best.get("text_score", 0.5),
-                "prediction": prediction,
-                "explanation": explanation,
-                "article_id": article_id,
+                "prediction": best.get("prediction", "Unknown"),
+                "explanation": best.get("text_explanation", ""),
+                "article_id": best_id,
                 "source": "firestore_semantic",
-                "session_id": session_id,
-                "details": [{"score": best.get("text_score", 0.5), "prediction": prediction, "explanation": explanation, "source": "firestore_semantic", "article_id": best_article_id, "similarity": firestore_semantic['similarity']}]
+                "session_id": session_id
             })
 
-        print("No semantic Firestore hit; querying Pinecone for semantic similar verified fakes...")
-        semantic_result = search_feedback_semantic(original_text, article_id=article_id, verified_only=False)
-        if semantic_result.get("source") == "cache":
-            cached_doc_id = semantic_result.get("article_id")
+        # ✅ Pinecone semantic cache
+        pinecone_result = search_feedback_semantic(original_text, article_id=article_id)
+        if pinecone_result.get("source") == "cache":
             return jsonify({
-                **semantic_result,
+                **pinecone_result,
                 "article_id": article_id,
                 "source": "semantic_cache",
-                "session_id": session_id, 
-                "details": [{
-                    "score": semantic_result.get("score", 0.5),
-                    "prediction": semantic_result.get("prediction", "Unknown"),
-                    "explanation": semantic_result.get("explanation", ""),
-                    "source": "semantic_cache",
-                    "article_id": cached_doc_id
-                }]
+                "session_id": session_id
             })
 
-        print(f"No semantic cache hit for text: '{text}' - Running new analysis pipeline")
+        # 🚀 NEW ANALYSIS (pipeline)
         model_result = detect_fake_text(original_text)
-        text_score = model_result.get("summary", {}).get("score", 0.5) / 100
-        text_prediction = model_result.get("summary", {}).get("prediction", "Unknown")
-        explanation = model_result.get("summary", {}).get("explanation", "Analysis complete.")
 
-        verified = True
-        embedding = generate_embedding(original_text)
-        total_reports = 1 if text_score < 0.5 else 0
-        doc_data = {
-            "url": url,
-            "text": original_text,
-            "normalized_id": norm_id,
-            "embedding": embedding,
-            "text_score": text_score,
-            "prediction": text_prediction,
-            "text_explanation": explanation,
-            "total_views": 1,
-            "total_reports": total_reports,
-            "last_updated": datetime.utcnow(),
-            "type": "text",
-            "verified": verified
-        }
-        db.collection('articles').document(article_id).set(doc_data)
+        text_score = model_result["summary"]["score"] / 100
+        text_prediction = model_result["summary"]["prediction"]
+        explanation = model_result["summary"]["explanation"]
 
-        store_feedback(
-            original_text, explanation, [], "system", article_id=article_id,
-            score=text_score, prediction=text_prediction, verified=verified
-        )
+        # ✅ Store using helper functions only (NO duplicate set())
+        store_in_firestore(original_text, text_score * 100, text_prediction, explanation)
+        store_in_pinecone(original_text, text_score * 100, text_prediction, explanation)
 
         safe_result = make_json_safe(model_result)
-        response = {
+        return jsonify({
             "score": text_score,
             "prediction": text_prediction,
             "explanation": explanation,
@@ -323,13 +257,12 @@ def detect_text():
             "details": [safe_result],
             "runtime": safe_result.get("runtime", 0),
             "claims_checked": safe_result.get("claims_checked", 0)
-        }
-        
-        return jsonify(response)
+        })
 
     except Exception as e:
-        print(f"Error in /detect_text: {e}")
+        print(f"🔥 Error in /detect_text: {e}")
         return jsonify({"error": str(e)}), 500
+
     
 @app.route("/detect_text_initial", methods=["POST"])
 @limiter.limit("60 per minute")
