@@ -599,59 +599,6 @@ Text: {claim}
         print(f"❌ Reformulation exception: {e}")
         return []
 
-def store_in_firestore(text, overall_conf, overall_label, combined_explanation):
-    """
-    Stores evaluated article into Firestore with the SAME schema as your original system.
-    """
-    try:
-        embedding = [float(x) for x in get_embedding(text).tolist()]
-
-        if db:
-            doc_id = hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-            db.collection("articles").document(doc_id).set({
-                "text": text,
-                "embedding": embedding,
-                "verified": True,
-                "prediction": overall_label,
-                "text_score": overall_conf / 100,
-                "gemini_reasoning": combined_explanation,
-                "text_explanation": combined_explanation,
-                "last_updated": datetime.utcnow(),
-                "type": "text"
-            }, merge=True)
-
-            print("[Firestore] ✅ Stored successfully")
-            return True
-
-    except Exception as e:
-        print(f"[Firestore Storage Error] ❌ {e}")
-
-    return False
-
-def store_in_pinecone(text, overall_conf, overall_label, combined_explanation):
-    """
-    Stores text + metadata into Pinecone using store_feedback()
-    """
-    try:
-        store_feedback(
-            text=text,
-            explanation=combined_explanation,
-            sources=[],                 
-            user_fingerprint="system",
-            score=overall_conf / 100,    
-            prediction=overall_label,
-            verified=True,
-        )
-
-        print("[Pinecone] ✅ Stored successfully")
-        return True
-
-    except Exception as e:
-        print(f"[Pinecone Store Error] ❌ {e}")
-
-    return False
-
 async def summarize_claim(claim: str) -> str:
     """Summarize claim into Google query with fallback."""
     try:
@@ -996,22 +943,48 @@ def quick_initial_assessment(text: str) -> dict:
             "error": str(e)
         }
 
-async def run_parallel_storage(text, score, label, explanation):
-        loop = asyncio.get_running_loop()
+def run_storage(text, score, label, explanation):
+    try:
+        embedding = [float(x) for x in get_embedding(text).tolist()]
 
-        firestore = loop.run_in_executor(
-            None,
-            lambda text=text, score=score, label=label, explanation=explanation:
-                store_in_firestore(text, score, label, explanation)
+        if db:
+            doc_id = hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+            db.collection("articles").document(doc_id).set({
+                "text": text,
+                "embedding": embedding,
+                "verified": True,
+                "prediction": label,
+                "text_score": score / 100,
+                "gemini_reasoning": explanation,
+                "text_explanation": explanation,
+                "last_updated": datetime.utcnow(),
+                "type": "text"
+            }, merge=True)
+
+            print("[Firestore] ✅ Stored successfully")
+            return True
+
+    except Exception as e:
+        print(f"[Firestore Storage Error] ❌ {e}")
+
+    try:
+        store_feedback(
+            text=text,
+            explanation=explanation,
+            sources=[],                 
+            user_fingerprint="system",
+            score=score / 100,    
+            prediction=label,
+            verified=True,
         )
 
-        pinecone = loop.run_in_executor(
-            None,
-            lambda text=text, score=score, label=label, explanation=explanation:
-                store_in_pinecone(text, score, label, explanation)
-        )
+        print("[Pinecone] ✅ Stored successfully")
+        return True
 
-        return await asyncio.gather(firestore, pinecone)
+    except Exception as e:
+        print(f"[Pinecone Store Error] ❌ {e}")
+
 
 def detect_fake_text(text: str) -> dict:
     import asyncio, time, math, re
@@ -1166,7 +1139,7 @@ def detect_fake_text(text: str) -> dict:
 
         combined_explanation = " | ".join(r["explanation"] for r in results[:3])
 
-        await run_parallel_storage(text, overall_conf, overall_label, combined_explanation)
+        run_storage(text, overall_conf, overall_label, combined_explanation)
 
         return {
             "summary": {

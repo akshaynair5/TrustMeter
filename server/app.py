@@ -242,10 +242,6 @@ def detect_text():
         text_prediction = model_result["summary"]["prediction"]
         explanation = model_result["summary"]["explanation"]
 
-        # ✅ Store using helper functions only (NO duplicate set())
-        store_in_firestore(original_text, text_score * 100, text_prediction, explanation)
-        store_in_pinecone(original_text, text_score * 100, text_prediction, explanation)
-
         safe_result = make_json_safe(model_result)
         return jsonify({
             "score": text_score,
