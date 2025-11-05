@@ -1730,6 +1730,7 @@ chrome.runtime.onMessage.addListener(message => {
 // AUTO RUN TEXT ANALYSIS
 // ---------------------------
 setTimeout(analyzeTextNow, 5000);
+setTimeout(analyzeTextNow, 5000);
 
 // ---------------------------
 // BADGE CLICK TOGGLE
