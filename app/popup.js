@@ -90,7 +90,7 @@ function startLogStream(sessionId) {
   const logDisplay = $("factDisplay");
   if (!logDisplay) return;
   
-  eventSource = new EventSource(`http://127.0.0.1:5000/stream_logs/${sessionId}`);
+  eventSource = new EventSource(`https://misinfo-backend-804712050799.us-central1.run.app/stream_logs/${sessionId}`);
   
   eventSource.onmessage = (event) => {
     try {
@@ -561,7 +561,7 @@ function showConfirmationPopup(text, explanation) {
 }
 
 function submitFeedback(responseType) {
-  fetch("https://h2sdemo-804712050799.us-central1.run.app/submit_feedback", {
+  fetch("https://misinfo-backend-804712050799.us-central1.run.app/submit_feedback", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
