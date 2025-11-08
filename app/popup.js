@@ -226,13 +226,20 @@ function switchTab(tabId) {
 switchTab("results");
 
 function updateResultsEmptyState() {
+  const el = document.getElementById("resultsEmptyState");
+  if (!el) return;
+
   const hasResults = document.querySelector("#results .result-card") !== null;
-  document.getElementById("resultsEmptyState").style.display = hasResults ? "none" : "flex";
+  el.style.display = hasResults ? "none" : "flex";
 }
 
+
 function updateHistoryEmptyState() {
+  const el = document.getElementById("historyEmptyState");
+  if (!el) return; 
+
   const history = JSON.parse(localStorage.getItem("analysisHistory") || "[]");
-  document.getElementById("historyEmptyState").style.display = history.length > 0 ? "none" : "flex";
+  el.style.display = history.length > 0 ? "none" : "flex";
 }
 
 document.getElementById("tabResults").onclick = () => switchTab("results");
@@ -282,9 +289,6 @@ function displayResult(result) {
 
   resultsDiv.appendChild(card);
 
-  updateResultsEmptyState();
-  updateHistoryEmptyState();
-
   saveToHistory({
     score: calculateConfidenceScore(result),
     prediction,
@@ -292,8 +296,15 @@ function displayResult(result) {
     text
   });
 
+  updateResultsEmptyState();
+  updateHistoryEmptyState();
+
   if (["fake", "misleading"].includes(prediction.toLowerCase())) {
-    setTimeout(() => showConfirmationPopup(text, explanation), 20000);
+    console.log("✅ Scheduling feedback popup for 20 seconds...");
+    setTimeout(() => {
+      console.log("⚠️ Showing confirmation popup NOW");
+      showConfirmationPopup(text, explanation)
+    }, 20000);
   }
 }
 
@@ -308,9 +319,14 @@ function displayError(message) {
 }
 
 function displayFeedbackMessage() {
-  $("results").innerHTML = `<div class="feedback-message success">Thank you for your feedback!</div>`;
-  setTimeout(() => $("results").classList.add("hidden"), 4000);
+  const div = document.createElement("div");
+  div.className = "feedback-message success";
+  div.textContent = "Thank you for your feedback!";
+  $("results").prepend(div);
+
+  setTimeout(() => div.remove(), 3000);
 }
+
 
 // ==========================================
 // TEXT ANALYSIS HANDLER
@@ -558,13 +574,17 @@ buttonContainer.style.cssText = "display:flex; gap:12px;";
 buttonContainer.append(yesButton, noButton);
 
 confirmationModal.append(questionText, buttonContainer);
+// (document.body || document.documentElement).appendChild(confirmationModal);
 document.documentElement.appendChild(confirmationModal);
+
 
 function showConfirmationPopup(text, explanation) {
   window.currentText = text;
   window.currentExplanation = explanation;
-  confirmationModal.style.display = "flex";
+  confirmationModal.classList.remove("hidden");
+  confirmationModal.style.setProperty("display", "flex", "important");
 }
+
 
 function submitFeedback(responseType) {
   fetch("https://misinfo-backend-804712050799.us-central1.run.app/submit_feedback", {
