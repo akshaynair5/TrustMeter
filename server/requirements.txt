@@ -7,11 +7,9 @@ google-cloud-vision==3.7.4
 protobuf>=3.20.2,<6.0.0
 google-generativeai>=0.7.0
 python-dotenv >= 1.0.0
-transformers
 torch
 bs4
 Pillow
-sentence-transformers
 pinecone
 cryptography
 google-cloud-firestore
@@ -26,3 +24,6 @@ google-cloud-translate
 flask-cors
 gunicorn
 nest_asyncio
+torch
+sentence-transformers
+transformers

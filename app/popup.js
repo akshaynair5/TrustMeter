@@ -243,6 +243,12 @@ displayResult = function(result) {
   switchTab("results");
   originalDisplayResult(result);
 };
+function sanitize(text) {
+  return text
+    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")   // convert **bold**
+    .replace(/\*(.*?)\*/g, "<em>$1</em>")              // convert *italic*
+    .replace(/(?:\r\n|\r|\n)/g, "<br>");               // newlines → <br>
+}
 
 function displayResult(result) {
   hideLoading();
@@ -275,7 +281,8 @@ function displayResult(result) {
     </div>
     <div class="result-explanation">
       <div class="result-explanation">
-        <strong>Analysis:</strong> ${marked.parse(explanation)}
+        <strong>Analysis:</strong><br>
+        ${sanitize(explanation)}
       </div>
     </div>
   `;
@@ -314,7 +321,7 @@ function displayFeedbackMessage() {
 // ==========================================
 async function handleTextCheck() {
   showLoading();
-
+  $("results").innerHTML = ""
   try {
     let [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 

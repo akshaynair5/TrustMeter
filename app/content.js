@@ -195,20 +195,19 @@ if (typeof chrome !== 'undefined' && chrome.runtime) {
       }
     }
 
-    if (message.type === "TEXT_INITIAL_RESULT" || message.type === "TEXT_RESULT") {
+    if (message.type === "TEXT_ANALYSIS_RESULT") {
       const data = message.payload;
-      if (data && (data.score || data.initial_analysis?.score)) {
-        const score = data.score || data.initial_analysis?.score || 0;
+      if (data && data.score != null) {
+        const score = data.score;
+
         const textScoreDiv = document.querySelector('#sub-scores div:nth-child(1) div:last-child');
-        if (textScoreDiv && textScoreDiv.tagName === 'DIV') {
+        if (textScoreDiv) {
           const scoreSpan = textScoreDiv.querySelector('span');
           if (scoreSpan) {
             scoreSpan.textContent = `${score}%`;
           } else {
             textScoreDiv.textContent = `${score}%`;
           }
-        } else if (textScoreDiv) {
-          textScoreDiv.textContent = `${score}%`;
         }
 
         const textResultSpan = document.getElementById('text-result');
@@ -1729,7 +1728,6 @@ chrome.runtime.onMessage.addListener(message => {
 // ---------------------------
 // AUTO RUN TEXT ANALYSIS
 // ---------------------------
-setTimeout(analyzeTextNow, 5000);
 setTimeout(analyzeTextNow, 5000);
 
 // ---------------------------
