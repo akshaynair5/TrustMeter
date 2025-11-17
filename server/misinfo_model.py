@@ -182,56 +182,63 @@ def ask_gemini_structured(prompt: str) -> Dict[str, Any]:
     except Exception as e:
         return {"error": str(e), "parsed": {}}
 
-# ---------------- Google Fact Check API ----------------
-def query_google_fact_check_api(text: str, max_results=5) -> dict:
+def query_google_fact_check_api(text: str, max_results: int = 5) -> dict:
+    """
+    Queries Google's Fact Check Tools API for claims related to the input text.
+    Returns structured results with summary counts (same format as before).
+    """
     import requests, re
 
-    try:
-        sentences = re.split(r'(?<=[.!?])\s+', text.strip())
-        candidates = [s for s in sentences if 5 <= len(s.split()) <= 20]
-        refined = max(candidates, key=len, default=text[:100]).strip()
+    def empty_result(status="no_fact_checks", error=None):
+        res = {
+            "status": status,
+            "fact_checks": [],
+            "summary": {"total": 0, "false_count": 0, "true_count": 0, "mixed_count": 0}
+        }
+        if error:
+            res["error"] = str(error)
+        return res
 
+    try:
+        # --- Pick the most representative sentence ---
+        sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+        refined = max(sentences, key=len, default=text[:100]).strip()[:400]
+
+        # --- API call ---
         resp = requests.get(
             "https://factchecktools.googleapis.com/v1alpha1/claims:search",
             params={
                 "key": FACT_CHECK_API_KEY,
                 "query": refined,
                 "pageSize": max_results,
-                "languageCode": "en"
+                "languageCode": "en",
             },
-            timeout=6
+            timeout=6,
         )
 
         if resp.status_code != 200:
-            return {
-                "status": "api_error",
-                "fact_checks": [],
-                "summary": {"total": 0, "false_count": 0, "true_count": 0, "mixed_count": 0}
-            }
+            return empty_result("api_error")
 
         claims = resp.json().get("claims", [])
         if not claims:
-            return {
-                "status": "no_fact_checks",
-                "fact_checks": [],
-                "summary": {"total": 0, "false_count": 0, "true_count": 0, "mixed_count": 0}
-            }
+            return empty_result()
 
+        # --- Initialize accumulators ---
         fact_checks = []
         counters = {"false": 0, "true": 0, "mixed": 0}
 
-        for claim in claims[:max_results]:
-            text_snippet = claim.get("text", "")[:150]
-            reviews = claim.get("claimReview", [])[:2]
+        # --- Process results ---
+        for c in claims[:max_results]:
+            snippet = c.get("text", "")[:150]
+            for r in c.get("claimReview", [])[:2]:
+                rating = (r.get("textualRating") or "").lower()
 
-            for r in reviews:
-                rating = r.get("textualRating", "").lower()
-
-                if "false" in rating or "fake" in rating or "incorrect" in rating or "misleading" in rating or "pants" in rating:
+                # Fast, direct mapping
+                if any(w in rating for w in ("false", "fake", "incorrect", "misleading", "pants")):
                     cat = "false"
-                elif "true" in rating or "correct" in rating or "accurate" in rating or "verified" in rating:
+                elif any(w in rating for w in ("true", "correct", "accurate", "verified")):
                     cat = "true"
-                elif "mixed" in rating or "partial" in rating or "mostly" in rating or "half" in rating:
+                elif any(w in rating for w in ("mixed", "partial", "mostly", "half")):
                     cat = "mixed"
                 else:
                     cat = "unknown"
@@ -240,25 +247,20 @@ def query_google_fact_check_api(text: str, max_results=5) -> dict:
                     counters[cat] += 1
 
                 fact_checks.append({
-                    "claim": text_snippet,
+                    "claim": snippet,
                     "publisher": r.get("publisher", {}).get("name", "Unknown"),
                     "rating": rating,
                     "rating_category": cat,
                     "title": r.get("title", ""),
-                    "url": r.get("url", "")
+                    "url": r.get("url", ""),
                 })
 
         total = len(fact_checks)
         if not total:
-            return {
-                "status": "no_fact_checks",
-                "fact_checks": [],
-                "summary": {"total": 0, "false_count": 0, "true_count": 0, "mixed_count": 0}
-            }
+            return empty_result()
 
-        fr = counters["false"] / total
-        tr = counters["true"] / total
-
+        # --- Determine summary status ---
+        fr, tr = counters["false"] / total, counters["true"] / total
         if fr >= 0.6:
             status = "predominantly_false"
         elif tr >= 0.6:
@@ -275,17 +277,12 @@ def query_google_fact_check_api(text: str, max_results=5) -> dict:
                 "total": total,
                 "false_count": counters["false"],
                 "true_count": counters["true"],
-                "mixed_count": counters["mixed"]
-            }
+                "mixed_count": counters["mixed"],
+            },
         }
 
     except Exception as e:
-        return {
-            "status": "error",
-            "fact_checks": [],
-            "summary": {"total": 0, "false_count": 0, "true_count": 0, "mixed_count": 0},
-            "error": str(e)
-        }
+        return empty_result("error", e)
 
 def extract_metadata_with_gemini(text: str) -> dict:
     try:
@@ -550,51 +547,6 @@ async def fetch_google(session, query, num_results=None):
         print(f"❌ Google fetch failed: {e}")
         return []
 
-async def extract_keywords(claim: str) -> List[str]:
-    """
-    Reformulate the claim into 3–6 compressed variations preserving meaning.
-    Returns an array of alternate phrasing, not keywords.
-    """
-    try:
-        prompt = f"""
-Rewrite this claim into 3–6 alternative formulations that preserve meaning.
-Each reformulation should be concise, factual, and under 25 words.
-Return ONLY a JSON array of strings.
-
-Text: {claim}
-"""
-        resp = await asyncio.to_thread(ask_gemini_structured, prompt)
-
-        if "error" in resp:
-            print(f"⚠️ Reformulation error: {resp['error']}")
-            return []
-
-        parsed = resp.get("parsed")
-
-        # Accept JSON list
-        if isinstance(parsed, list):
-            variations = parsed
-        # Sometimes model returns { "rewrites": [...] }
-        elif isinstance(parsed, dict):
-            variations = parsed.get("rewrites") or parsed.get("summaries") or parsed.get("sentences", [])
-        # As fallback parse raw text into JSON-like list
-        else:
-            raw = resp.get("raw_text", "")
-            variations = re.findall(r'"([^"]+)"', raw)
-
-        # Cleanup
-        clean = [
-            v.strip()
-            for v in variations
-            if isinstance(v, str) and len(v.strip()) > 5
-        ]
-
-        return clean[:6]
-
-    except Exception as e:
-        print(f"❌ Reformulation exception: {e}")
-        return []
-
 async def summarize_claim(claim: str) -> str:
     """Summarize claim into Google query with fallback."""
     try:
@@ -638,34 +590,23 @@ Text: {claim}
 
 
 async def corroborate_all_with_google_async(claims: List[str]) -> Dict[str, Any]:
-
+    claims = [await c if asyncio.iscoroutine(c) else c for c in claims]
     evidences = []
     CREDIBLE_DOMAINS = load_credible_domains_cached()
     domain_updates: Dict[str, float] = {}
 
-    keyword_tasks = [extract_keywords(claim) for claim in claims]
-    summary_tasks = [summarize_claim(claim) for claim in claims]
-
-    keywords_list = await asyncio.gather(*keyword_tasks)
-    summaries_list = await asyncio.gather(*summary_tasks)
-
     async with aiohttp.ClientSession() as session:
         tasks = []
 
-        for claim, kws, summary in zip(claims, keywords_list, summaries_list):
-
-            # ----------- fallback if summary is garbage -----------
+        for claim in claims:
+            # ----------- fallback if claim text too short -----------
+            summary = claim.strip()
             if not summary or len(summary) < 10 or "{" in summary or "error" in summary.lower():
-                print(f"⚠️ Invalid summary, using original claim text instead")
+                print(f"⚠️ Invalid text for corroboration, using original claim text instead")
                 summary = claim[:120]
 
-            # ----------- build google query -----------
-            if kws:
-                kw_str = " ".join(kws[:4])
-                query = f"{summary} {kw_str}" if kw_str.lower() not in summary.lower() else summary
-            else:
-                query = summary
-
+            # ----------- build google query (summary only) -----------
+            query = summary
             print(f"🔍 Google query => {query[:80]}")
             tasks.append(fetch_google(session, query, num_results=10))
 
@@ -679,13 +620,12 @@ async def corroborate_all_with_google_async(claims: List[str]) -> Dict[str, Any]
         return emb_cache[text]
 
     for claim, items in zip(claims, results_list):
-
         if not items:
             print(f"⚠️ No results returned from Google for claim: {claim[:60]}")
             continue
 
         articles = []
-        for it in items[:8]: 
+        for it in items[:8]:
             snippet = html.unescape(it.get("snippet", "")).strip()
             if not snippet or len(snippet) < 20:
                 continue
@@ -704,7 +644,7 @@ CLAIM: "{claim}"
 
 ARTICLES:
 {json.dumps(articles, indent=2)}
-Also take into account the date of posting of the article dismiss the articles if another newer claim says the opposite of the older articles
+Also take into account the date of posting of the article; dismiss older articles if newer ones contradict them.
 Return STRICT JSON ONLY:
 
 {{
@@ -712,14 +652,14 @@ Return STRICT JSON ONLY:
    {{
      "title": "...",
      "link": "...",
-     "relevance": "supports" | "contradicts"| "unrelated",
+     "relevance": "supports" | "contradicts" | "unrelated",
      "confidence": 0-100
    }}
  ]
 }}
 """
 
-        gem_resp = ask_gemini_structured(gem_prompt)
+        gem_resp = await asyncio.to_thread(ask_gemini_structured, gem_prompt)
         evaluated = gem_resp.get("parsed", {}).get("evaluated", []) if isinstance(gem_resp, dict) else []
 
         claim_evidences = []
@@ -806,101 +746,91 @@ def assemble_gemini_prompt_structured(claim: str, evidences: List[Dict[str, Any]
     fc_summary = fact_check_results["summary"]
 
     return f"""
-You are an AI fact-checking assistant synthesizing ML predictions, search evidence, and professional fact-checks.
+    You are an AI fact-checking assistant.
 
-{context_part}
-Input claim: \"\"\"{claim}\"\"\"
-Corroboration status: {status}
-Evidence snippets: {json.dumps(evidences[:5], ensure_ascii=False)}
-Fact-Check Status: {fact_check_results['status']}
-Fact-Check Summary:
-{fact_checks_str}
-   - Total fact-checks: {fc_summary['total']}
-   - Rated FALSE: {fc_summary['false_count']} | TRUE: {fc_summary['true_count']} | MIXED: {fc_summary['mixed_count']}
-Today's date: {today_str}
+    {context_part}
+    Input claim: \"\"\"{claim}\"\"\"
+    Corroboration status: {status}
+    Evidence snippets: {json.dumps(evidences[:5], ensure_ascii=False)}
+    Fact-Check Status: {fact_check_results['status']}
+    Fact-Check Summary:
+    {fact_checks_str}
+    - Total fact-checks: {fc_summary['total']}
+    - Rated FALSE: {fc_summary['false_count']} | TRUE: {fc_summary['true_count']} | MIXED: {fc_summary['mixed_count']}
+    Today's date: {today_str}
 
-FIRST, ASSESS THE CONTENT TYPE:
-───────────────────────────────
-Determine if this text contains VERIFIABLE FACTUAL CLAIMS that require fact-checking.
+    Step 1 — Determine whether the text contains **verifiable factual claims**.
 
-NON-FACTUAL CONTENT (Skip full analysis):
-- Personal experiences: "My trip to Japan", "I visited the museum"
-- Opinions/feelings: "This movie is amazing", "I think cats are better"
-- Questions: "What happened in 2020?", "How do I cook pasta?"
-- Creative content: Video titles, song lyrics, fiction, poems
-- Instructions/how-tos: "Steps to make coffee"
-- Promotional content: "Buy now!", "Best deals today"
-- Greetings/casual chat: "Hello everyone", "Thanks for watching"
+    Non-factual content (skip analysis):
+    - Personal stories or experiences
+    - Opinions, emotional statements
+    - Questions
+    - Creative/fictional content (titles, lyrics, poems)
+    - Instructions or how-to content
+    - Promotional material or casual greetings
 
-FACTUAL CONTENT (Requires analysis):
-- News events: "Earthquake hits California", "President announces policy"
-- Scientific claims: "Study shows coffee prevents cancer"
-- Historical statements: "Napoleon died in 1821"
-- Statistics: "Unemployment rate dropped to 3%"
-- Allegations: "Company accused of fraud"
+    If the content is non-factual:
+    Return JSON with:
+    - prediction: "Not Applicable"
+    - confidence: 100
+    - explanation: "This content does not contain verifiable factual claims | [describe content type]"
+    - evidence: []
+    - content_type: "personal/opinion/question/creative/promotional/casual"
 
-IF NON-FACTUAL CONTENT DETECTED:
-Return JSON with:
-- prediction: "Not Applicable"
-- confidence: 100
-- explanation: "This content does not contain verifiable factual claims requiring fact-checking | [Brief description of content type]"
-- evidence: []
-- content_type: "personal/opinion/question/creative/promotional/casual"
+    Example (non-factual):
+    {{
+    "prediction": "Not Applicable",
+    "confidence": 100,
+    "explanation": "Personal travel content without factual claims | This appears to be a YouTube video title about someone's vacation",
+    "evidence": [],
+    "content_type": "personal"
+    }}
 
-Example for non-factual:
-{{
-  "prediction": "Not Applicable",
-  "confidence": 100,
-  "explanation": "Personal travel content without factual claims | This appears to be a YouTube video title about someone's vacation",
-  "evidence": [],
-  "content_type": "personal"
-}}
+    If factual content is detected:
+    Perform full fact-checking analysis.
 
-IF FACTUAL CONTENT DETECTED:
-Proceed with full fact-checking analysis:
+    Instructions:
+    - Prioritize consensus from professional fact checks.
+    - Evaluate the claim against evidence and current date ({today_str}).
+    - Consider temporal context (accurate but outdated claims are still real).
+    - Output a strict JSON object with:
 
-Instructions:
-- Prioritize fact-check consensus if available (e.g., predominantly_false → Fake).
-- Use evidence snippets and ML context to verify factual accuracy.
-- Evaluate the claim considering today's date ({today_str}).
-- Consider temporal context: old news may be accurate but outdated.
-- Return a strict JSON object with keys:
+    - prediction: "Real", "Fake", or "Misleading"
+    - confidence: integer 0–100
+    - explanation: 1–2 short sentences | use "|" between reasoning steps
+    - evidence: 1–3 short supporting snippets (≤ 50 words each)
+    - content_type: "news"
+    - human_summary (optional): brief explanation
 
-- prediction: "Real", "Fake", or "Misleading"
-- confidence: integer 0–100
-- explanation: 1–2 short, plain sentences | Use "|" to separate reasoning steps
-- evidence: 1–3 key snippets (≤50 words each) with a `support` field
-- content_type: "news"
-- human_summary (optional): plain summary of the claim
+    Example (factual):
+    {{
+    "prediction": "Real",
+    "confidence": 85,
+    "explanation": "Multiple sources confirm the described protests occurred | Context indicates an ongoing event",
+    "evidence": [
+        {{"source":"BBC", "link":"https://...", "snippet":"BBC confirms the protests occurred in Delhi.", "support":"Supports"}}
+    ],
+    "content_type": "news",
+    "human_summary": "The claim about protests in Delhi is accurate."
+    }}
 
-Example for factual content:
-{{
-  "prediction": "Real",
-  "confidence": 85,
-  "explanation": "The claim matches current verified reports | Context indicates it refers to an ongoing event",
-  "evidence": [
-    {{"source":"BBC", "link":"https://...", "snippet":"BBC confirms the described protests occurred in Delhi.", "support":"Supports"}}
-  ],
-  "content_type": "news",
-  "human_summary": "The claim about protests in Delhi is accurate."
-}}
+    Special cases:
+    1. Old news (> 1 year):
+    - prediction: "Real" (if accurate at the time)
+    - explanation includes: "This refers to a past event from [date]"
+    2. Satire/parody:
+    - prediction: "Misleading"
+    - explanation: "This appears to be satire or parody content | Not intended as factual reporting"
+    3. Mixed personal + factual content:
+    - Evaluate only the factual components
 
-SPECIAL CASES:
-──────────────
-1. **Old News**: If claim is factual but refers to past events (>1 year old):
-   - prediction: "Real" (if accurate at the time)
-   - Add to explanation: "This refers to a past event from [date]"
+    IMPORTANT RULES (DO NOT BREAK):
+    - Do NOT mention ML models, search engines, APIs, datasets, or fact-check sources.
+    - Do NOT reveal internal process, reasoning, or evidence retrieval steps.
+    - Present conclusions as if **you** analyzed the claim directly.
+    - Return ONLY valid JSON. No extra text.
+    """
 
-2. **Satire/Parody**: If content appears satirical:
-   - prediction: "Misleading"
-   - explanation: "This appears to be satire or parody content | Not meant as factual reporting"
-
-3. **Mixed Content**: Personal story with factual claims:
-   - Focus only on verifiable facts
-   - Ignore personal narrative elements
-
-Return ONLY valid JSON. No additional text.
-"""
 import asyncio
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -982,101 +912,156 @@ def run_storage(text, score, label, explanation):
     except Exception as e:
         print(f"[Pinecone Store Error] ❌ {e}")
 
-
 def detect_fake_text(text: str) -> dict:
-    import asyncio, time, math, re
-
+    """
+    Full pipeline:
+    1. Metadata extraction + fact check (parallel)
+    2. Vertex AI classification + Google corroboration (parallel)
+    3. Per claim structured reasoning (Gemini)
+    4. Ensemble prediction (Vertex + Gemini + fact-check + corroboration)
+    5. FINAL LABEL decided by Gemini (direct from structured response)
+    6. Store ONLY if result is high-confidence + not fallback
+    """
+    import asyncio, time, re, inspect
     start_total = time.time()
+
     text = re.sub(r"(?<=[a-zA-Z])\.(?=[A-Z])", ". ", text)
 
-    # ----------------------------
-    # PHASE 1 – Fact check + metadata (parallel sync)
-    # ----------------------------
+    # ---------------------------
+    # Helpers
+    # ---------------------------
+    def _ensure_coroutine_func(fn):
+        if inspect.iscoroutinefunction(fn):
+            return fn
+        async def _wrap(*a, **k):
+            return await asyncio.to_thread(fn, *a, **k)
+        return _wrap
+
+    async def _call_maybe_async(fn, *args, **kwargs):
+        if inspect.isawaitable(fn) and not callable(fn):
+            return await fn
+        if callable(fn):
+            res = fn(*args, **kwargs)
+            return await res if inspect.isawaitable(res) else res
+        return fn
+
+    def _run_sync_main(coro):
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        if loop and loop.is_running():
+            import nest_asyncio
+            nest_asyncio.apply()
+        return asyncio.run(coro)
+
+    # ----------------------------------------------------------------------
+    # PHASE 1: Fact-check + metadata in parallel
+    # ----------------------------------------------------------------------
     async def run_parallel_phase1():
-        loop = asyncio.get_running_loop()
-        fact_check = loop.run_in_executor(None, query_google_fact_check_api, text)
-        metadata = loop.run_in_executor(None, extract_metadata_with_gemini, text)
-        return await asyncio.gather(fact_check, metadata)
+        fact_check_fn = _ensure_coroutine_func(lambda: query_google_fact_check_api(text))
+        metadata_fn = _ensure_coroutine_func(lambda: extract_metadata_with_gemini(text))
 
-    # ----------------------------
-    # PHASE 2 – Vertex + Google corroboration (parallel async)
-    # ----------------------------
-    async def run_parallel_phase2(metadata):
-        claims = simple_sentence_split(metadata["text"])
-        combined_query = " OR ".join(claims[:3])
-
-        loop = asyncio.get_running_loop()
-        vertex_task = loop.run_in_executor(
-            None, lambda: extract_vertex_scores(predict_with_vertex_ai(metadata))
+        fact_check_res, metadata_res = await asyncio.gather(
+            fact_check_fn(), metadata_fn(), return_exceptions=True
         )
-        corroboration_task = corroborate_all_with_google_async([combined_query])
 
-        vertex_scores, corroboration_data = await asyncio.gather(vertex_task, corroboration_task)
+        if isinstance(fact_check_res, Exception):
+            print(f"[WARN] fact_check failed: {fact_check_res}")
+            fact_check_res = {"status": "no_fact_checks", "error": str(fact_check_res)}
+
+        if isinstance(metadata_res, Exception):
+            print(f"[WARN] metadata extraction failed: {metadata_res}")
+            metadata_res = {"text": text}
+
+        return fact_check_res, metadata_res
+
+    # ----------------------------------------------------------------------
+    # PHASE 2: Vertex AI + corroboration in parallel
+    # ----------------------------------------------------------------------
+    async def run_parallel_phase2(metadata):
+        meta_text = metadata.get("text", text) if isinstance(metadata, dict) else text
+        claim_summary = await summarize_claim(meta_text) 
+        claims = [claim_summary]
+
+        async def _vertex_wrapper():
+            pv = await _call_maybe_async(predict_with_vertex_ai, metadata)
+            ev = extract_vertex_scores(pv)
+            return await ev if inspect.isawaitable(ev) else ev
+
+        tasks = [
+            asyncio.create_task(_vertex_wrapper()),
+            asyncio.create_task(corroborate_all_with_google_async([claim_summary]))
+        ]
+
+        vertex_scores, corroboration_data = await asyncio.gather(*tasks, return_exceptions=True)
+
+        if isinstance(vertex_scores, Exception):
+            print(f"[WARN] vertex failed: {vertex_scores}")
+            vertex_scores = {"Real": 0.7, "Fake": 0.2, "Misleading": 0.1}
+
+        if isinstance(corroboration_data, Exception):
+            print(f"[WARN] corroboration failed: {corroboration_data}")
+            corroboration_data = {"status": "no_results", "evidences": []}
+
         return vertex_scores, corroboration_data, claims
 
-    # ----------------------------
-    # PHASE 3 – Per-claim evaluation (weighted ensemble)
-    # ----------------------------
+    # ----------------------------------------------------------------------
+    # PHASE 3: Structured claim checks (Gemini reasoning)
+    # ----------------------------------------------------------------------
     async def run_parallel_claim_checks(claims, corroboration_data, fact_check_results, metadata, vertex_scores):
 
         async def process_claim(claim):
-            loop = asyncio.get_running_loop()
             parsed = {}
+            safe_scores = vertex_scores or {"Real": 0.7, "Fake": 0.2, "Misleading": 0.1}
 
-            # If nothing corroborates & no fact checks found → fallback "Unknown"
-            if corroboration_data["status"] == "no_results" and fact_check_results["status"] == "no_fact_checks":
-                gem_pred, gem_conf = "Unknown", 60
-                evidence_strength = 0
-
-                safe_vertex_scores = vertex_scores or {"Real": 0.7, "Fake": 0.2, "Misleading": 0.1}
+            if corroboration_data.get("status") == "no_results" and fact_check_results.get("status") == "no_fact_checks":
                 final_pred, final_conf = adjusted_ensemble(
-                    gem_pred, gem_conf,
-                    safe_vertex_scores,
-                    fact_check_results.get("status", "no_fact_checks"),
-                    corroboration_data.get("status", "no_results"),
-                    evidence_strength
+                    "Unknown", 60, safe_scores,
+                    fact_check_results.get("status"), corroboration_data.get("status"), 0
                 )
+                return {
+                    "claim_text": claim,
+                    "gemini": {"prediction": "Unknown", "confidence": 60},
+                    "vertex_ai": vertex_scores,
+                    "fact_check": fact_check_results,
+                    "corroboration": corroboration_data,
+                    "ensemble": {"final_prediction": final_pred, "final_confidence": final_conf},
+                    "explanation": f"{final_pred}: {final_conf}% | evidence=0",
+                    "evidence_strength": 0
+                }
 
-            else:
-                gem_resp = await loop.run_in_executor(
-                    None,
-                    lambda: ask_gemini_structured(
-                        assemble_gemini_prompt_structured(
-                            claim,
-                            corroboration_data["evidences"],
-                            corroboration_data["status"],
-                            fact_check_results,
-                            full_text=metadata["text"]
-                        )
+            try:
+                gem_resp = await _call_maybe_async(
+                    ask_gemini_structured,
+                    assemble_gemini_prompt_structured(
+                        claim,
+                        corroboration_data.get("evidences", []),
+                        corroboration_data.get("status"),
+                        fact_check_results,
+                        full_text=metadata.get("text", text)
                     )
                 )
+            except Exception as e:
+                print(f"[WARN] gemini structured failed for claim '{claim}': {e}")
+                gem_resp = {}
 
-                parsed = gem_resp.get("parsed", {}) or {}
-                gem_pred = parsed.get("prediction", "Unknown")
-                gem_conf = int(parsed.get("confidence", 70))
+            parsed = gem_resp.get("parsed", {}) or {}
+            gem_pred = parsed.get("prediction", "Unknown")
+            gem_conf = int(parsed.get("confidence", 70)) if str(parsed.get("confidence", "")).isdigit() else 70
 
-                # ✅ Weighted evidence score (support - contradict)
-                supports = sum((e.get("confidence", 50) / 100.0)
-                               for e in corroboration_data.get("evidences", [])
-                               if e.get("relevance") == "supports")
+            supports = sum(e.get("confidence", 50) / 100.0 for e in corroboration_data.get("evidences", [])
+                           if e.get("relevance") == "supports")
+            contradicts = sum(e.get("confidence", 50) / 100.0 for e in corroboration_data.get("evidences", [])
+                              if e.get("relevance") == "contradicts")
+            evidence_strength = round(supports - contradicts, 3)
 
-                contradicts = sum((e.get("confidence", 50) / 100.0)
-                                  for e in corroboration_data.get("evidences", [])
-                                  if e.get("relevance") == "contradicts")
+            final_pred, final_conf = adjusted_ensemble(
+                gem_pred, gem_conf, safe_scores,
+                fact_check_results.get("status"), corroboration_data.get("status"), evidence_strength
+            )
 
-                evidence_strength = round(supports - contradicts, 3)
-
-                safe_vertex_scores = vertex_scores or {"Real": 0.7, "Fake": 0.2, "Misleading": 0.1}
-                final_pred, final_conf = adjusted_ensemble(
-                    gem_pred, gem_conf, safe_vertex_scores,
-                    fact_check_results.get("status", "no_fact_checks"),
-                    corroboration_data.get("status", "no_results"),
-                    evidence_strength
-                )
-
-            explanation = parsed.get("explanation")
-            if not explanation or "{" in explanation:
-                explanation = f"{final_pred}: {final_conf}% | evidence={evidence_strength}"
+            explanation = parsed.get("explanation") or f"{final_pred}: {final_conf}% | evidence={evidence_strength}"
 
             return {
                 "claim_text": claim,
@@ -1089,67 +1074,84 @@ def detect_fake_text(text: str) -> dict:
                 "evidence_strength": evidence_strength
             }
 
-        return await asyncio.gather(*[process_claim(c) for c in claims])
+        results = await asyncio.gather(*(process_claim(c) for c in claims), return_exceptions=True)
 
-    # ----------------------------
-    # FULL PIPELINE EXECUTION
-    # ----------------------------
+        out = []
+        for idx, r in enumerate(results):
+            if isinstance(r, Exception):
+                print(f"[WARN] claim processing failed for claim idx {idx}: {r}")
+                out.append({
+                    "claim_text": claims[idx],
+                    "gemini": {"prediction": "Unknown", "confidence": 60},
+                    "vertex_ai": vertex_scores,
+                    "fact_check": fact_check_results,
+                    "corroboration": corroboration_data,
+                    "ensemble": {"final_prediction": "Unknown", "final_confidence": 60},
+                    "explanation": "Unknown: 60% | evidence=0",
+                    "evidence_strength": 0
+                })
+            else:
+                out.append(r)
+        return out
+
+    # ----------------------------------------------------------------------
+    # MAIN EXECUTION
+    # ----------------------------------------------------------------------
     async def main():
         fact_check_results, metadata = await run_parallel_phase1()
         vertex_scores, corroboration_data, claims = await run_parallel_phase2(metadata)
+        results = await run_parallel_claim_checks(claims, corroboration_data, fact_check_results, metadata, vertex_scores)
 
-        results = await run_parallel_claim_checks(
-            claims, corroboration_data, fact_check_results, metadata, vertex_scores
-        )
+        if not results:
+            return {
+                "summary": {"score": 50, "prediction": "Unknown", "explanation": "No claims could be extracted"},
+                "runtime": round(time.time() - start_total, 2),
+                "claims_checked": 0,
+                "raw_details": []
+            }
 
-        label_stats = {}
+        from collections import defaultdict
+        label_weighted_conf, label_count = defaultdict(float), defaultdict(int)
+
         for r in results:
-            lbl = r["ensemble"]["final_prediction"]
-            conf = r["ensemble"]["final_confidence"]
+            pred = r["gemini"]["prediction"]
+            conf = r["gemini"]["confidence"]
+            label_weighted_conf[pred] += conf
+            label_count[pred] += 1
 
-            if lbl not in label_stats:
-                label_stats[lbl] = {"sum_conf": 0.0, "count": 0}
-
-            label_stats[lbl]["sum_conf"] += conf
-            label_stats[lbl]["count"] += 1
-
-        # --------------------------
-        # Step 1: majority vote
-        # --------------------------
-        majority_label = max(label_stats.items(), key=lambda x: x[1]["count"])[0]
-        majority_count = label_stats[majority_label]["count"]
-
-        # If majority label appears more than 50%, use it directly
-        if majority_count > len(results) / 2:
-            overall_label = majority_label
-        else:
-            # otherwise: tie or fragmented → use highest avg confidence ONLY as tie breaker
-            overall_label = max(label_stats.items(), key=lambda x: x[1]["sum_conf"] / x[1]["count"])[0]
-
-        # final confidence = average confidence of selected label
-        chosen = label_stats[overall_label]
-        avg_conf = chosen["sum_conf"] / chosen["count"]
-
-        # Reduce confidence inflation from single outliers
-        overall_conf = int(min(100, avg_conf * (0.65 + 0.35 * math.log1p(chosen["count"]))))
-
-
+        overall_label = max(label_weighted_conf, key=label_weighted_conf.get)
+        overall_conf = int(label_weighted_conf[overall_label] / label_count[overall_label])
         combined_explanation = " | ".join(r["explanation"] for r in results[:3])
 
-        run_storage(text, overall_conf, overall_label, combined_explanation)
+        if overall_label == "Unknown" or overall_conf < 50:
+            print("⚠️ Gemini uncertain, using ensemble fallback")
+            ensemble_labels = defaultdict(float)
+            for r in results:
+                ensemble_labels[r["ensemble"]["final_prediction"]] += r["ensemble"]["final_confidence"]
+            ensemble_label = max(ensemble_labels, key=ensemble_labels.get)
+            if ensemble_label != "Unknown":
+                overall_label = ensemble_label
+                overall_conf = int(ensemble_labels[ensemble_label] / len(results))
+
+        print(f"✅ Final label: {overall_label} ({overall_conf}%) - Gemini consensus from {len(results)} claim(s)")
+
+        if (
+            overall_label not in ["Unknown", "Not Applicable"]
+            and "fallback" not in combined_explanation.lower()
+            and "could not" not in combined_explanation.lower()
+        ):
+            try:
+                await _call_maybe_async(run_storage, text, overall_conf, overall_label, combined_explanation)
+            except Exception as e:
+                print(f"[WARN] run_storage failed: {e}")
+        else:
+            print("[CACHE] ❌ Not storing incomplete / unreliable result.")
 
         return {
-            "summary": {
-                "score": overall_conf,
-                "prediction": overall_label,
-                "explanation": combined_explanation,
-            },
+            "summary": {"score": overall_conf, "prediction": overall_label, "explanation": combined_explanation},
             "runtime": round(time.time() - start_total, 2),
             "claims_checked": len(results),
             "raw_details": results
         }
 
-    import nest_asyncio
-    nest_asyncio.apply()
-
-    return asyncio.run(main())
+    return _run_sync_main(main())

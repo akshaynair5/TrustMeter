@@ -37,7 +37,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   const isBlocked = blockDomains.some(domain => currentUrl.includes(domain));
 
   if (isBlocked) {
-    console.log("TrustMeter disabled on search engine results.");
 
     const checkText = document.getElementById("checkText");
     const analyzeImages = document.getElementById("clickToCheck");
@@ -300,9 +299,7 @@ function displayResult(result) {
   updateHistoryEmptyState();
 
   if (["fake", "misleading"].includes(prediction.toLowerCase())) {
-    console.log("✅ Scheduling feedback popup for 20 seconds...");
     setTimeout(() => {
-      console.log("⚠️ Showing confirmation popup NOW");
       showConfirmationPopup(text, explanation)
     }, 20000);
   }

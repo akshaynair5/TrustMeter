@@ -20,12 +20,7 @@ def start_task(request_data, session_id=None):
 
     task_id = generate_task_id()
 
-    if session_id:
-        for tid in get_session_tasks(session_id):
-            cancel_task(tid)
-
     def task_wrapper(task_id, request_data):
-        """Runs inside child process"""
         try:
             result = detect_text_logic(request_data)
 
@@ -37,8 +32,8 @@ def start_task(request_data, session_id=None):
             with _lock:
                 if task_id in TASKS:
                     TASKS[task_id]["result"] = {"error": str(e)}
-    p = multiprocessing.Process(target=task_wrapper, args=(task_id, request_data))
 
+    p = multiprocessing.Process(target=task_wrapper, args=(task_id, request_data))
     p.start()
 
     with _lock:

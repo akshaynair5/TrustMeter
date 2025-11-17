@@ -20,7 +20,6 @@ const tabSessions = {};
 function getSessionForTab(tabId) {
   if (!tabSessions[tabId]) {
     tabSessions[tabId] = crypto.randomUUID();
-    console.log(`Created new session for tab ${tabId}:`, tabSessions[tabId]);
   }
   return tabSessions[tabId];
 }
@@ -30,8 +29,6 @@ function getSessionForTab(tabId) {
 async function clearSessionForTab(tabId) {
   const sessionId = tabSessions[tabId];
   if (!sessionId) return;
-  
-  console.log(`Clearing session for tab ${tabId}:`, sessionId);
   
   try {
     await fetch(`${BACKEND_BASE}/cancel_session`, {
@@ -43,8 +40,6 @@ async function clearSessionForTab(tabId) {
       body: JSON.stringify({ session_id: sessionId }),
       keepalive: true
     });
-    
-    console.log(`✅ Session cancelled for tab ${tabId}`);
   } catch (err) {
     console.error(`Error cancelling session for tab ${tabId}:`, err);
   } finally {
@@ -111,7 +106,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       
       analyzeText(tabId, message.payload, sessionId)
         .then(result => {
-          console.log("Text analysis result (raw):", result);
           const payload = {
             score: result.score || result.summary?.score || 0,
             explanation: result.explanation || result.summary?.explanation || "No explanation available.",
@@ -121,7 +115,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             article_id: result.article_id,
             source: result.source
           };
-          console.log("✅ Processed text result:", payload);
           sendResponse(payload);
         })
         .catch(err => {
@@ -148,11 +141,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return false;
       }
       
-      console.log(`🖼️ Processing image analysis for tab ${tabId}, session ${sessionId}`);
-      
       analyzeImage(tabId, message.payload, sessionId)
         .then(results => {
-          console.log(`✅ Image analysis complete for tab ${tabId}:`, results);
           
           const resultsWithSession = results.map(r => ({
             ...r,
@@ -160,7 +150,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           }));
 
           resultsWithSession.forEach(res => {
-            console.log(`📤 Sending IMAGE_ANALYSIS_RESULT to tab ${tabId}:`, res);
             sendToTab("IMAGE_ANALYSIS_RESULT", res);
           });
 
@@ -219,7 +208,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       })
         .then(res => res.json())
         .then(data => {
-          console.log("Active tasks:", data);
           sendResponse(data);
         })
         .catch(err => {
@@ -388,7 +376,6 @@ async function analyzeImage(tabId, payload, sessionId) {
 }
 
 chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
-  console.log(`Tab ${tabId} closed, cancelling session...`);
   clearSessionForTab(tabId);
 });
 
@@ -399,7 +386,6 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 });
 
 chrome.tabs.onReplaced?.addListener((addedTabId, removedTabId) => {
-  console.log(`Tab ${removedTabId} replaced by ${addedTabId}, transferring session...`);
   if (tabSessions[removedTabId]) {
     tabSessions[addedTabId] = tabSessions[removedTabId];
     delete tabSessions[removedTabId];
@@ -408,7 +394,6 @@ chrome.tabs.onReplaced?.addListener((addedTabId, removedTabId) => {
 
 if (chrome.runtime.onSuspend) {
   chrome.runtime.onSuspend.addListener(() => {
-    console.log("Extension suspending, cancelling all sessions...");
     Object.keys(tabSessions).forEach(tabId => {
       clearSessionForTab(parseInt(tabId));
     });
@@ -416,7 +401,6 @@ if (chrome.runtime.onSuspend) {
 }
 
 setInterval(() => {
-  console.log("Running periodic session cleanup...");
   
   chrome.tabs.query({}, (tabs) => {
     const activeTabIds = new Set(tabs.map(t => t.id));
@@ -424,7 +408,6 @@ setInterval(() => {
     Object.keys(tabSessions).forEach(tabId => {
       const numericTabId = parseInt(tabId);
       if (!activeTabIds.has(numericTabId)) {
-        console.log(`Cleaning up orphaned session for tab ${tabId}`);
         clearSessionForTab(numericTabId);
       }
     });

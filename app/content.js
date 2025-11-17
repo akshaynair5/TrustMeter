@@ -1,4 +1,9 @@
 // ---------------------------
+// AUTO ANALYSIS USER PREFERENCE
+// ---------------------------
+let autoAnalysisEnabled = JSON.parse(localStorage.getItem("trustmeter_auto_analysis") ?? "true");
+
+// ---------------------------
 // SESSION MANAGEMENT
 // ---------------------------
 let sessionId = localStorage.getItem('trustmeter_session_id');
@@ -6,15 +11,12 @@ if (!sessionId) {
   sessionId = crypto.randomUUID();
   localStorage.setItem('trustmeter_session_id', sessionId);
 }
-console.log("TrustMeter Session ID:", sessionId);
 
 // ---------------------------
 // CANCEL SESSION ON EXIT
 // ---------------------------
 function cancelSession() {
   if (!sessionId) return;
-  
-  console.log("Cancelling session:", sessionId);
   const blob = new Blob(
     [JSON.stringify({ session_id: sessionId })],
     { type: 'application/json' }
@@ -30,7 +32,7 @@ function cancelSession() {
       },
       body: JSON.stringify({ session_id: sessionId }),
       keepalive: true
-    }).catch(err => console.log('Session cancel failed:', err));
+    }).catch(err => console.error('Session cancel failed:', err));
   }
 }
 
@@ -46,10 +48,8 @@ if (typeof chrome !== 'undefined' && chrome.runtime) {
 
     if (message.type === "IMAGE_ANALYSIS_RESULT") {
       const result = message.payload;
-      console.log("📊 Received image analysis result:", result);
 
       if (result.session_id !== sessionId) {
-        console.log("Ignoring result from different session");
         return;
       }
 
@@ -110,9 +110,7 @@ if (typeof chrome !== 'undefined' && chrome.runtime) {
         }
             if (message.type === "IMAGE_ANALYSIS_RESULT") {
               const result = message.payload;
-              console.log("📊 Received image analysis result:", result);
               if (result.session_id !== sessionId) {
-                console.log("Ignoring result from different session");
                 return;
               }
               const targetImage = document.querySelector(`img[data-analyzing-session="${result.session_id}"]`);
@@ -346,7 +344,6 @@ document.head.appendChild(overlayStyles);
 
 window.addEventListener('analyze-image', (event) => {
   const imageUrl = event.detail.url;
-  console.log("🖼️ Image overlay clicked:", imageUrl);
   
   const img = event.detail.imageElement;
   const overlay = event.detail.overlay;
@@ -439,7 +436,6 @@ window.addEventListener('analyze-image', (event) => {
       } 
     },
     (response) => {
-      console.log("Image analysis response:", response);
 
       const loadingElement = document.getElementById(`loading-${btoa(imageUrl).slice(0, 10)}`);
       if (loadingElement) loadingElement.remove();
@@ -733,9 +729,36 @@ closeBtn.addEventListener("mouseout", () => {
 });
 closeBtn.onclick = hidePanel;
 
-header.appendChild(title);
-header.appendChild(closeBtn);
+// ---------- AUTO ANALYSIS TOGGLE SWITCH ----------
 
+
+
+const toggle = document.createElement("button");
+toggle.style.cssText = `
+  border: none;
+  padding: 6px 10px;
+  border-radius: 12px;
+  background: ${autoAnalysisEnabled ? "#22c55e" : "#ef4444"};
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+  cursor: pointer;
+`;
+
+toggle.textContent = autoAnalysisEnabled ? "Auto: ON" : "Auto: OFF";
+
+toggle.onclick = () => {
+  autoAnalysisEnabled = !autoAnalysisEnabled;
+  localStorage.setItem("trustmeter_auto_analysis", JSON.stringify(autoAnalysisEnabled));
+
+  toggle.textContent = autoAnalysisEnabled ? "Auto: ON" : "Auto: OFF";
+  toggle.style.background = autoAnalysisEnabled ? "#22c55e" : "#ef4444";
+
+  updateAnalyzeButtonVisibility(); 
+};
+
+header.appendChild(toggle);
+header.appendChild(closeBtn);
 // ---------------------------
 // SCORE ROW
 // ---------------------------
@@ -760,7 +783,7 @@ Object.assign(scoreText.style, {
 });
 
 const refreshBtn = document.createElement("button");
-refreshBtn.textContent = "🔄 Analyze";
+refreshBtn.textContent = "Analyze";
 Object.assign(refreshBtn.style, {
   padding: "10px 18px",
   borderRadius: "12px",
@@ -792,9 +815,17 @@ refreshBtn.onclick = () => {
   collectedScores = [];
 
   analyzeTextNow();
-  analyzeImagesNow();
 };
 scoreRow.appendChild(scoreText);
+scoreRow.appendChild(refreshBtn);
+
+// show / hide ANALYZE button based on auto analysis preference
+function updateAnalyzeButtonVisibility() {
+  refreshBtn.style.display = autoAnalysisEnabled ? "none" : "inline-flex";
+}
+
+// call initially
+updateAnalyzeButtonVisibility();
 
 // ---------------------------
 // SECTIONS (MODERN DESIGN)
@@ -1357,7 +1388,6 @@ function analyzeTextNow() {
       stopWorking();
       if (!response || response.error) {
         setError(response?.error || "No response from backend.");
-        console.log("Text analysis failed:", response);
         return;
       }
       setResult(response.score ?? 0, response.explanation);
@@ -1414,7 +1444,7 @@ function analyzeImagesNow() {
         if (container2) container2.textContent = "";
       }
       if (response && response.session_id) {
-        console.log("Image analysis completed for session:", response.session_id);
+        // console.log("Image analysis completed for session:", response.session_id);
       }
     }
   );
@@ -1436,7 +1466,6 @@ chrome.runtime.onMessage.addListener(message => {
 
     case "TEXT_ANALYSIS_RESULT":
       {
-        console.log("Received TEXT_ANALYSIS_RESULT:", message.payload);
         const overall = message.payload || {};
         setResult(overall.score || 0, overall.explanation || "No explanation");
 
@@ -1475,7 +1504,6 @@ chrome.runtime.onMessage.addListener(message => {
       break;
 
     case "IMAGE_ANALYSIS_RESULT": {
-      console.log("🎯 Received IMAGE_ANALYSIS_RESULT:", message.payload);
       
       const { 
         url, 
@@ -1504,13 +1532,6 @@ chrome.runtime.onMessage.addListener(message => {
         console.error("❌ image-results container not found!");
         return;
       }
-      
-      console.log("✅ Processing image result:", {
-        url: imageUrl,
-        score,
-        verdict: verdict || prediction,
-        explanation: explanation ? explanation.substring(0, 100) : 'No explanation'
-      });
       
       if (container.textContent.includes("No images")) container.innerHTML = "";
 
@@ -1583,8 +1604,6 @@ chrome.runtime.onMessage.addListener(message => {
       let color = "#b91c1c";
       let label = "🤖 AI Generated";
       let bgGradient = "linear-gradient(90deg, rgba(239, 68, 68, 0.1) 0%, rgba(220, 38, 38, 0.05) 100%)";
-      
-      console.log("🏷️ Result verdict:", resultVerdict);
       
       if (resultVerdict.includes("real") || resultVerdict.includes("authentic")) {
         color = "#15803d";
@@ -1703,8 +1722,7 @@ chrome.runtime.onMessage.addListener(message => {
       updateImageAverage();
       updateBadge();
       showPanel();
-      
-      console.log("✅ Image result displayed successfully");
+
       break;
     }
 
@@ -1717,7 +1735,6 @@ chrome.runtime.onMessage.addListener(message => {
       break;
       
     case "SESSION_CANCELLED":
-      console.log("Session cancelled:", message.payload);
       if (message.payload?.session_id === sessionId) {
         console.log("Current session tasks stopped successfully");
       }
@@ -1728,7 +1745,11 @@ chrome.runtime.onMessage.addListener(message => {
 // ---------------------------
 // AUTO RUN TEXT ANALYSIS
 // ---------------------------
-setTimeout(analyzeTextNow, 5000);
+if (autoAnalysisEnabled) {
+  setTimeout(() => {
+    analyzeTextNow();
+  }, 5000);
+}
 
 // ---------------------------
 // BADGE CLICK TOGGLE
@@ -1818,8 +1839,6 @@ window.addEventListener('unload', () => {
 
 let heartbeatInterval = setInterval(() => {
   if (document.hidden) return;
-
-  console.log("Session active:", sessionId);
 }, 60000); 
 
 window.addEventListener('unload', () => {
@@ -1833,7 +1852,7 @@ if (typeof chrome !== 'undefined' && chrome.runtime) {
         type: "CHECK_SESSION_TASKS",
         payload: { session_id: sessionId }
       }, (response) => {
-        console.log("Active tasks for session:", response);
+
       });
     }
   });
@@ -1874,6 +1893,3 @@ sessionInfo.addEventListener("mouseleave", () => {
 });
 
 panel.appendChild(sessionInfo);
-
-console.log("✨ TrustMeter initialized with modern UI");
-console.log("📊 Session ID:", sessionId);

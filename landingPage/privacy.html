@@ -1,0 +1,571 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>TrustMeter — Privacy Policy & Data Practices</title>
+  <meta name="description" content="Privacy policy for TrustMeter — AI-powered page text & image trust estimator Chrome extension." />
+  <style>
+    :root{
+      --bg:#f7fafc; --card:#ffffff; --muted:#64748b; --accent1:#667eea; --accent2:#764ba2;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", "Segoe UI Mono", monospace;
+    }
+    body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial; margin:0; background:var(--bg); color:#0f172a; line-height:1.6}
+    header{background:linear-gradient(90deg,var(--accent1),var(--accent2)); color:#fff; padding:40px 20px}
+    .wrap{max-width:980px;margin:0 auto;padding:24px}
+    h1{margin:0;font-size:28px;letter-spacing:-0.4px}
+    .byline{opacity:.95;margin-top:6px}
+    .card{background:var(--card);border-radius:14px;padding:20px;margin:18px 0;box-shadow:0 8px 30px rgba(2,6,23,0.06)}
+    pre{background:#0b1220;color:#e6eef8;padding:12px;border-radius:8px;overflow:auto;font-family:var(--mono);font-size:13px}
+    code{background:#f1f5f9;padding:.15em .4em;border-radius:6px;font-family:var(--mono);font-size:13px}
+    table{width:100%;border-collapse:collapse;margin-top:8px}
+    td,th{padding:10px;border-bottom:1px solid #f1f5f9;text-align:left}
+    .muted{color:var(--muted)}
+    .pill{display:inline-block;padding:6px 10px;border-radius:999px;background:linear-gradient(90deg,var(--accent1),var(--accent2));color:#fff;font-weight:700;font-size:13px}
+    footer{padding:40px 20px;text-align:center;color:var(--muted);font-size:13px}
+    nav{display:flex;gap:12px;flex-wrap:wrap;margin-top:12px}
+    a{color:var(--accent1);text-decoration:none}
+    .section-title{display:flex;align-items:center;gap:12px}
+    .right{float:right}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <div style="display:flex;align-items:center;gap:16px">
+        <div style="width:56px;height:56px;border-radius:10px;background:rgba(255,255,255,0.12);display:flex;align-items:center;justify-content:center;font-weight:800">
+          TM
+        </div>
+        <div>
+          <h1>TrustMeter — Privacy Policy & Data Practices</h1>
+          <div class="byline muted" style="color: #0b1220;">Effective date: <strong id="effectiveDate">{{LAST_UPDATED_DATE}}</strong> • Version: 1.0</div>
+        </div>
+      </div>
+      <nav>
+        <a href="#summary" style="color: #0b1220;">Quick summary</a>
+        <a href="#what-we-access" style="color: #0b1220;">What we access</a>
+        <a href="#dataflow" style="color: #0b1220;">Data flow</a>
+        <a href="#third-parties" style="color: #0b1220;">Third-party services</a>
+        <a href="#contact" style="color: #0b1220;">Contact</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap" role="main">
+    <section id="summary" class="card" aria-labelledby="summary-h">
+      <h2 id="summary-h" class="section-title">Quick summary</h2>
+      <p class="muted">Short version:</p>
+      <ul>
+        <li><strong>TrustMeter analyzes only content you ask it to analyze.</strong> It does not collect your identity or browsing history.</li>
+        <li>We store a randomly generated session ID in the browser <code>localStorage</code> for session lifecycle management. See <a href="#local-storage">Local storage</a>.</li>
+        <li>Text and/or image content that you request to analyze may be sent to our backend for AI inference and evidence lookup. We do not keep personally identifying information tied to analysis requests.</li>
+        <li>Add this policy URL to your Chrome Web Store listing so reviewers and users can read it.</li>
+      </ul>
+    </section>
+
+    <section id="what-we-access" class="card" aria-labelledby="access-h">
+        <h2 id="access-h" class="section-title">What data TrustMeter may access and why</h2>
+    <p class="muted">
+        TrustMeter analyzes only the content of the webpage the user is currently viewing. It does not store or track who the user is, what sites they visit over time, or any personal browsing profile.
+        All content access is strictly for performing the misinformation analysis feature.
+    </p>
+
+    <h3>📌 How the extension interacts with webpage content</h3>
+    <p>
+        When a webpage loads, TrustMeter’s <code>content script</code> becomes active on that page. Depending on your settings, it can operate in two modes:
+    </p>
+
+    <ul>
+        <li>
+        <strong>Auto analysis mode (default)</strong> — TrustMeter automatically extracts readable text from the page and sends it for analysis.
+        <br />
+        ↳ This is done using an algorithm that strips away navigation, menus, ads, and non-content elements to identify the “main article text.”
+        </li>
+        <li>
+        <strong>Manual mode (privacy-first option)</strong> — No text is sent until you click the <em>Analyze</em> button in the extension popup or highlight specific text and choose <em>Verify Claim</em>.
+        <br />
+        ↳ You can turn auto mode on/off at any time inside the extension popup settings.
+        </li>
+    </ul>
+
+    <h3>🔍 What data is extracted</h3>
+    <table aria-describedby="access-h">
+        <thead><tr><th>Data type</th><th>Accessed?</th><th>Stored?</th><th>Sent to server?</th><th>Purpose</th></tr></thead>
+        <tbody>
+        <tr>
+            <td>Visible page article text (auto mode)</td>
+            <td><strong>Yes</strong> (page load)</td>
+            <td>No (processed in-memory only)</td>
+            <td><strong>Yes</strong> — sent only for analysis</td>
+            <td>
+            Extracted using a readability algorithm. Used to generate: detected claims, fact-check results, supporting URLs, and a page trust score.
+            </td>
+        </tr>
+
+        <tr>
+            <td>Selected text (manual verify mode)</td>
+            <td><strong>Yes</strong> (only on user selection)</td>
+            <td>No</td>
+            <td><strong>Yes</strong> — sent only when the user manually triggers “Verify Claim”</td>
+            <td>
+            Allows users to verify specific paragraphs, statements, or claims instead of the entire page.
+            </td>
+        </tr>
+
+        <tr>
+            <td>Images on webpage (manual verify mode)</td>
+            <td><strong>Yes</strong> (only when user clicks analyze icon)</td>
+            <td>No</td>
+            <td><strong>Yes</strong> — image URL or encoded bytes sent for analysis</td>
+            <td>
+            Enables AI reverse-search and deepfake detection to determine authenticity and context of the image.
+            </td>
+        </tr>
+
+        <tr>
+            <td>Session identifier (<code>trustmeter_session_id</code>)</td>
+            <td><strong>Yes</strong></td>
+            <td><strong>Stored locally in browser only</strong> (<code>localStorage</code>)</td>
+            <td>Sent as a session tag with each analysis request</td>
+            <td>
+            Used to match incoming analysis responses to the correct webpage and allow session cancellation if the user leaves the page.
+            </td>
+        </tr>
+
+        <tr>
+            <td>Browser history, personal profile, IP address</td>
+            <td>No</td>
+            <td>No</td>
+            <td>No</td>
+            <td>TrustMeter does not collect anything that identifies the user personally.</td>
+        </tr>
+        </tbody>
+    </table>
+
+    <h3>🧠 Technical flow (step-by-step)</h3>
+    <pre>
+    1. User opens a webpage.
+    2. TrustMeter injects a content script into that webpage.
+    3. In auto mode: readable page text is extracted automatically.
+    In manual mode: extraction happens only when user requests.
+    4. A temporary session ID is created and kept locally.
+    5. Extracted text or selected text/image is sent securely to our backend.
+    6. Backend runs misinformation checks using AI and fact-check APIs.
+    7. Results are returned to the extension UI and shown to the user.
+    8. Temporary data is discarded after the analysis completes.
+    </pre>
+
+    <h3 id="local-storage">🗂️ Local storage usage (never synced)</h3>
+    <p>
+        The only entry stored is a randomly generated session ID, e.g.:
+    </p>
+    <pre>
+    trustmeter_session_id = "8fd9a312-83fe-4df7-b57a-7c9f89e17ce5"
+    </pre>
+    <p>
+        This ID is:
+    </p>
+    <ul>
+        <li>Not tied to any user identity</li>
+        <li>Never sent to third parties</li>
+        <li>Cleared automatically when the analysis session ends or the user closes the tab</li>
+    </ul>
+
+    <p class="muted">
+        The extension does <strong>not</strong> log browsing behavior or track navigation between sites. It only accesses content on the active tab, and only for the purpose of performing the misinformation detection feature.
+    </p>
+    </section>
+
+    <section id="dataflow" class="card" aria-labelledby="dataflow-h">
+    <h2 id="dataflow-h" class="section-title">Data Flow — How Information Moves Securely</h2>
+
+    <p>
+        The diagram below describes the lifecycle of data when TrustMeter performs an analysis.  
+        Every step is designed to prioritize transparency, user control, and privacy protection.
+    </p>
+
+    <ol>
+        <li>
+        <strong>Page interaction:</strong>  
+        When a user opens a webpage, TrustMeter’s content layer reads only the visible text elements that make up the primary article or post.  
+        If the user has enabled <em>automatic analysis</em>, this text is processed immediately; if disabled, nothing is sent until the user clicks <em>Analyze</em> or selects specific text or an image for verification.
+        </li>
+
+        <li>
+        <strong>Session initialization:</strong>  
+        Each analysis session is assigned a short-lived, randomly generated identifier.  
+        This ID ensures that results can be routed back to the correct tab or user interface without linking any personal or identifiable information.  
+        The ID exists only within the user’s browser storage and is not used for tracking or profiling.
+        </li>
+
+        <li>
+        <strong>Secure data transmission:</strong>  
+        When an analysis is triggered, only the extracted content (text snippet or image reference) and the anonymous session ID are sent to TrustMeter’s backend API over an encrypted HTTPS connection.  
+        The transmission does not include cookies, browsing history, or other metadata about the user or their device.
+        </li>
+
+        <li>
+        <strong>Cloud-side analysis:</strong>  
+        The backend applies multiple AI-based checks to evaluate credibility — including factual verification against reliable sources, claim detection, and content scoring.  
+        These processes happen in isolated containers with strict access controls. The analyzed data is treated as ephemeral and is not stored once the response is returned.
+        </li>
+
+        <li>
+        <strong>Response delivery:</strong>  
+        The backend returns only the computed trust score, fact-check insights, and summarized evidence.  
+        These results are displayed directly in the extension interface without storing user identity or session history.
+        </li>
+
+        <li>
+        <strong>Temporary caching & domain trust updates:</strong>  
+        To improve future accuracy, the system may temporarily cache non-personal insights such as the credibility rating of public domains or common sources.  
+        These aggregated records contain no personal identifiers and cannot be used to reconstruct user behavior.
+        </li>
+
+        <li>
+        <strong>Session termination:</strong>  
+        When the user navigates away or closes the tab, the active session is automatically ended and any temporary identifiers or cached data associated with it are cleared.
+        </li>
+    </ol>
+
+    <p class="muted">
+        At every stage, TrustMeter’s architecture ensures that only the minimal data necessary for misinformation detection is processed.  
+        No personal user data, browsing history, or identifying information is ever retained or sold.
+    </p>
+    </section>
+
+    <section id="storage-retention" class="card">
+    <h2 class="section-title">Storage, Retention & Deletion of Data</h2>
+
+    <h3>🔒 Client-side (stored on the user’s browser)</h3>
+    <p>
+        TrustMeter stores <strong>exactly one value locally</strong> in the user's browser:
+    </p>
+
+    <code>trustmeter_session_id = "randomly generated UUID"</code>
+
+    <ul>
+        <li>This ID is created by the extension using the browser’s secure random generator (<code>crypto.randomUUID()</code>).</li>
+        <li>It is stored in <code>localStorage</code> so the extension can associate responses from the backend with the correct tab/session.</li>
+        <li>The ID cannot be used to identify the user personally — it contains no personal information, browsing history, or device data.</li>
+        <li>When the browser tab is closed or the user navigates away, the extension automatically ends the session and clears the ID.</li>
+    </ul>
+
+    <p class="muted">
+        🔗 Code responsible for session creation and clearing is available here:<br>
+        <a href="https://github.com/akshaynair5/H2S_hackathon/blob/main/app/content.js" target="_blank">/app/content.js</a>
+    </p>
+
+    <hr>
+
+    <h3>☁️ Server-side (handled by the TrustMeter backend)</h3>
+    <p>
+        The backend only receives the content required for misinformation analysis  
+        (the selected text, extracted page text, or image reference) **along with the anonymous session ID**.
+    </p>
+
+    <p><strong>Retention behavior:</strong></p>
+    <ul>
+        <li>Analysis data exists only temporarily — just long enough to generate a rating and deliver results back to the user.</li>
+        <li>Once the analysis is complete, the content is automatically discarded and not logged against any user or profile.</li>
+        <li>In rare cases, the backend may store <em>aggregated source credibility scores</em> (e.g., domain-level trustworthiness), but those values:
+        <ul>
+            <li>contain no personal or session-level data,</li>
+            <li>cannot be tied back to any user or analysis request.</li>
+        </ul>
+        </li>
+    </ul>
+
+    <p class="muted">
+        🔗 Backend logic that handles analysis and transient processing:<br>
+        <a href="https://github.com/akshaynair5/H2S_hackathon/blob/main/server/misinfo_model.py" target="_blank">/backend/misinfo_model.py</a>
+    </p>
+
+    <hr>
+
+    <h3>🧹 Data deletion & user rights</h3>
+    <p>
+        TrustMeter was built to avoid storing personal data. However, if you believe 
+        an analysis request should be removed (for example, if server infrastructure retained logs temporarily),
+        you may request deletion.
+    </p>
+
+    <p><strong>To request deletion:</strong></p>
+    <ol>
+        <li>Open the <code>Developer Tools → Application → Local Storage</code> panel in Chrome.</li>
+        <li>Locate the value of <code>trustmeter_session_id</code>.</li>
+        <li>Email us the following:
+        <ul>
+            <li>your <code>trustmeter_session_id</code></li>
+            <li>approximate time of the analysis</li>
+        </ul>
+        </li>
+    </ol>
+
+    <p>
+        📧 <a href="mailto:aks7aynair@gmail.com">aks7aynair@gmail.com</a><br>
+        We will investigate and respond within <strong>30 days</strong>.
+    </p>
+
+    <p class="muted">
+        No personal data is required to submit a deletion request — only the anonymous session ID.
+    </p>
+    </section>
+
+    <section id="third-parties" class="card" aria-labelledby="third-h">
+    <h2 id="third-h" class="section-title">Third-Party Services</h2>
+
+    <p>
+        TrustMeter uses third-party cloud and AI providers only to perform misinformation analysis
+        (for example, verifying claims or checking credibility of a news source).
+        These services process only the text or image content you choose to analyze.
+        They never receive personal information about you, your identity, or your browsing history.
+    </p>
+
+    <h3>Services involved in processing</h3>
+    <ul>
+        <li><strong>AI Model Providers</strong>  
+        Used to evaluate content and produce trust / credibility analysis.  
+        <em>(Examples: Google Gemini, Google Vertex AI)</em>
+        </li>
+
+        <li><strong>Public Fact-Checking Aggregators</strong>  
+        Used to look up existing fact-checks published by trusted organizations.  
+        <em>(Examples: Google Fact Check Tools API)</em>
+        </li>
+
+        <li><strong>Search Index Providers</strong>  
+        Used to locate supporting or contradicting evidence from reputable sources.  
+        <em>(Examples: Google Custom Search)</em>
+        </li>
+
+        <li><strong>Cloud Compute Hosting</strong>  
+        Our secure backend infrastructure temporarily processes analysis requests.  
+        <em>(Examples: Google Cloud Run)</em>
+        </li>
+    </ul>
+
+    <p>
+        These providers may temporarily process the content you send (text or image reference),
+        but they do so only to fulfill the analysis request. They do <strong>not receive</strong>:
+    </p>
+
+    <ul>
+        <li>Your name</li>
+        <li>Your email</li>
+        <li>Your browsing history</li>
+        <li>Any data that identifies who you are</li>
+    </ul>
+
+    <p>
+        None of these services store user profiles or track behavior across websites.
+        TrustMeter does <strong>not</strong> sell user data or share personal data with any third-party service.
+    </p>
+
+    <hr>
+
+    <p class="muted">
+        🔗 For transparency, the backend logic is open-sourced:<br>
+        <a href="https://github.com/akshaynair5/H2S_hackathon/blob/main/server/misinfo_model.py" target="_blank">
+        View backend analysis code on GitHub →
+        </a>
+    </p>
+
+    <p class="muted">
+        If we ever add or replace third-party services, this privacy policy will be updated accordingly.
+    </p>
+    </section>
+
+    <section id="legal" class="card">
+      <h2 class="section-title">Legal basis & compliance (GDPR / CCPA)</h2>
+
+      <p><strong>GDPR:</strong> TrustMeter’s processing is based on user consent (explicit action to analyze content) and legitimate interest (providing the analysis feature). Users in the EU can request access or deletion as described under <a href="#rights">User rights</a>.</p>
+
+      <p><strong>CCPA:</strong> Residents of California have rights to request disclosure of categories of personal information collected, request deletion, and opt out of sale. We do not sell personal information.</p>
+
+      <p class="muted">This policy is not a substitute for legal advice. If you require legal compliance review for particular jurisdictions, consult with counsel.</p>
+    </section>
+
+    <section id="faqs" class="card">
+    <h2 class="section-title">Frequently Asked Questions (FAQ)</h2>
+
+    <h3>🔍 Does TrustMeter read everything I browse?</h3>
+    <p>
+        No. TrustMeter only reads <strong>the visible text and images on the webpage you are currently viewing</strong>, and only for the purpose of analyzing misinformation.
+    </p>
+
+    <p>TrustMeter operates in two modes:</p>
+    <ul>
+        <li>
+        <strong>Automatic mode (default):</strong> the extension extracts readable text when a page loads and processes it to generate an initial trust score.
+        </li>
+        <li>
+        <strong>Manual mode (privacy-first option):</strong> no content is analyzed unless you click <em>Analyze</em> or highlight and select text → <em>Verify Claim</em>.
+        </li>
+    </ul>
+
+    <p>You can switch between these modes at any time from the extension settings.</p>
+
+    <hr>
+
+    <h3>🎯 Can I analyze only a specific part of the page?</h3>
+    <p>
+        Yes. Instead of analyzing the whole page, you can highlight a paragraph or sentence and right-click:
+    </p>
+    <code>→ Verify Claim with TrustMeter</code>
+    <p>
+        The extension will analyze <strong>only the text you selected</strong> instead of the full page.
+    </p>
+
+    <hr>
+
+    <h3>🖼️ Does TrustMeter analyze images?</h3>
+    <p>
+        Yes — but only if <strong>you click the TrustMeter overlay</strong> on the image.  
+        Image URLs or encoded image bytes are sent only when you choose to verify them.
+    </p>
+
+    <hr>
+
+    <h3>👁️ Does the extension monitor my browsing or track which websites I visit?</h3>
+    <p>
+        No. TrustMeter does <strong>not track</strong> or log your browsing activity.  
+        We do not store:
+    </p>
+
+    <ul>
+        <li>your browsing history</li>
+        <li>which websites you open</li>
+        <li>how often you visit a site</li>
+    </ul>
+
+    <p>Analysis happens only on <strong>the active tab you choose</strong>.</p>
+
+    <hr>
+
+    <h3>🆔 Do you collect personal data like my name, email, IP address, or identity?</h3>
+    <p>
+        No — TrustMeter does <strong>not collect any personal information</strong>.
+    </p>
+
+    <p>
+        Standard cloud providers (such as Google Cloud) may temporarily log basic data like an IP address as part of normal network operation,
+        but this information is:
+    </p>
+
+    <ul>
+        <li>not stored by the TrustMeter backend</li>
+        <li>not linked to analysis results or sessions</li>
+        <li>not used to profile or identify users</li>
+    </ul>
+
+    <hr>
+
+    <h3>🔐 What is stored on my device?</h3>
+    <p>
+        Only an anonymous, temporary session ID is stored locally:
+    </p>
+    <code>trustmeter_session_id = "randomly_generated_UUID"</code>
+
+    <p>This ID exists only to link backend results to your browser tab and is cleared automatically when you close the tab.</p>
+
+    <hr>
+
+    <h3>☁️ What happens to the data sent to the backend for analysis?</h3>
+    <p>
+        Text and images are processed securely, only for the duration of the analysis.  
+        Once results are returned, the content is <strong>discarded and not stored</strong>.
+    </p>
+
+    <p>
+        In some cases, high-level <strong>domain credibility scores</strong> (e.g., "nytimes.com is rated credible") may be stored — but:
+    </p>
+
+    <ul>
+        <li>these do not include your session data</li>
+        <li>these cannot be used to reconstruct what you analyzed</li>
+    </ul>
+
+    <hr>
+
+    <h3>🚫 Do you sell or share any user data with advertisers or third parties?</h3>
+    <p><strong>No. Never.</strong></p>
+
+    <p>TrustMeter does not:</p>
+    <ul>
+        <li>sell user data</li>
+        <li>share data with advertisers</li>
+        <li>build profiles or tracking graphs</li>
+    </ul>
+
+    <hr>
+
+    <h3>⚙️ Which services help process the analysis?</h3>
+    <p>
+        TrustMeter uses secure cloud and AI providers (e.g., Google Cloud, Vertex AI, Gemini, Fact Check APIs)
+        only to perform misinformation evaluation. They receive only the text/image being analyzed — never personal or account data.
+    </p>
+
+    <p>
+        Backend transparency (open-source):
+        <a href="https://github.com/akshaynair5/H2S_hackathon/blob/main/server" target="_blank">View the processing code on GitHub →</a>
+    </p>
+
+    <hr>
+
+    <h3>🧹 How can I delete my data or opt out?</h3>
+    <p>
+        You can stop all analysis immediately by:
+    </p>
+    <ul>
+        <li>turning off auto-analysis in the extension UI, or</li>
+        <li>uninstalling the extension</li>
+    </ul>
+
+    <p>
+        If you believe a server log temporarily retained information, you may request deletion.
+        Include your temporary <code>trustmeter_session_id</code> (found in browser localStorage).
+    </p>
+
+    <p>
+        📧 <a href="mailto:aks7aynair@gmail.com">aks7aynair@gmail.com</a>
+    </p>
+
+    <p class="muted">
+        We will review and respond within 30 days.  
+        No personal information is required to submit a deletion request.
+    </p>
+    </section>
+
+    <section id="contact" class="card">
+      <h2 class="section-title">Contact & reporting</h2>
+      <p>For privacy or support inquiries:</p>
+      <p><strong>Email:</strong> <a href="mailto:aks7aynair@gmail.com">aks7aynair@gmail.com</a></p>
+      <p class="muted">Provide the session ID (if applicable) and the approximate timestamp of the analysis to help us locate any transient logs.</p>
+    </section>
+
+    <section id="changelog" class="card">
+      <h2 class="section-title">Changelog</h2>
+      <p><strong>10 November 2025</strong> — Initial privacy policy for TrustMeter v1.0.</p>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <div style="margin-bottom:8px">TrustMeter • AI-powered page trust estimator</div>
+      <div class="muted">This privacy policy describes data practices for the TrustMeter Chrome extension. Not legal advice — consult counsel for compliance in specific jurisdictions.</div>
+    </div>
+  </footer>
+
+  <script>
+    // Auto-fill date placeholders
+    (function(){
+      const d = document.getElementById('effectiveDate');
+      const now = new Date().toISOString().slice(0,10);
+      if(d && d.textContent.includes('{{LAST_UPDATED_DATE}}')) d.textContent = now;
+      // Replace example placeholders in-page (visual only)
+      document.body.innerHTML = document.body.innerHTML.replace(/\{\{YOUR_EMAIL\}\}/g,'aks7aynair@gmail.com');
+    })();
+  </script>
+</body>
+</html>

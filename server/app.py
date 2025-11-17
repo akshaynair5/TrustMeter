@@ -4,7 +4,7 @@ from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from vectorDb import search_feedback_semantic, store_feedback, cleanup_expired
-from database import generate_id, generate_normalized_id, generate_embedding, get_article_doc, firestore_semantic_search
+from database import generate_id, generate_normalized_id, get_article_doc, firestore_semantic_search
 from FakeImageDetection import detect_fake_image
 from google.cloud import firestore
 from tasks import cancel_session_tasks, get_session_tasks 
@@ -17,8 +17,7 @@ import queue
 import json
 import threading
 from translate import translate_to_english
-from sentence_transformers import SentenceTransformer
-from embedding_service import get_embedding, embed_text
+from langdetect import detect
 from database import db
 
 load_dotenv()
@@ -194,14 +193,19 @@ def detect_text():
         print(f"Processing request for session: {session_id}")
         print(f"User selected text: '{original_text}'")
         print(f"URL: {url}")
-
-        # ✅ Translate to English if needed
+        
         try:
+            lang = detect(original_text)
+        except:
+            lang = "unknown"
+
+        if lang != "en":
+            print("Translating because text is not English...")
             translation_result = translate_to_english(original_text)
             text_for_analysis = translation_result["translated_text"]
-        except Exception as e:
-            print(f"Translation error: {e}")
-            return jsonify({"error": "Failed to translate text"}), 500
+        else:
+            print("Text already in English — skipping translation.")
+            text_for_analysis = original_text
 
         text = text_for_analysis.strip()
         if not text or len(text) < 5:
@@ -308,63 +312,85 @@ def detect_text_initial():
 @app.route("/submit_feedback", methods=["POST"])
 @limiter.limit("100 per minute")
 def submit_feedback():
+    from database import generate_id, generate_normalized_id, get_article_doc 
+
     data = request.json
-    article_id = data.get("article_id", "")
-    text = data.get("text", "")
+
+    text = data.get("text", "").strip()
+    url = data.get("url", "").strip()   
     label = data.get("response", "").upper() 
 
-    if label == "YES":
-        label = "FAKE"
-    else:
-        label = "REAL"
-    print("Label is", label)
+    label = "FAKE" if label == "YES" else "REAL"
+
+    article_id = generate_id(url, text)           
+    normalized_id = generate_normalized_id(url, text)
+
     explanation = data.get("explanation", "")
     sources = data.get("sources", [])
     user_fingerprint = request.headers.get("user-fingerprint", "default")
+
     print(f"""
-Collected Data:
-  Article ID: {article_id}
-  Text: {text}
-  Label: {label}
-  Explanation: {explanation}
-  Sources: {sources}
-  User Fingerprint: {user_fingerprint}
-""")
+    ───────── FEEDBACK RECEIVED ─────────
+    Article ID: {article_id}
+    URL: {url}
+    Text: {text[:120]}...
+    Label: {label}
+    Explanation: {explanation}
+    Sources: {sources}
+    Fingerprint: {user_fingerprint}
+    Normalized ID: {normalized_id}
+    ──────────────────────────────────────
+    """)
 
-    if not article_id and not text.strip() or label not in ["REAL", "FAKE"]:
-        return jsonify({"error": "Missing article_id/text or invalid label (use REAL/FAKE)"}), 400
+    if not text or label not in ["REAL", "FAKE"]:
+        return jsonify({"error": "Missing text or invalid label (use REAL/FAKE)"}), 400
 
-    if article_id:
-        increment_reports = 1 if label == "FAKE" else 0
-        db.collection('articles').document(article_id).update({
+    doc_ref = db.collection("articles").document(article_id)
+    doc_snapshot = doc_ref.get()
+
+    increment_reports = 1 if label == "FAKE" else 0
+
+    if doc_snapshot.exists:
+
+        doc_ref.update({
             "total_views": firestore.Increment(1),
-            "total_reports": firestore.Increment(increment_reports)
+            "total_reports": firestore.Increment(increment_reports),
+            "last_updated": datetime.utcnow()
         })
-        db.collection('articles').document(article_id).collection('feedbacks').add({
+
+        doc_ref.collection("feedbacks").add({
             "label": label,
             "explanation": explanation,
+            "sources": sources,
             "user_fingerprint": user_fingerprint,
             "timestamp": datetime.utcnow()
         })
 
         doc = get_article_doc(article_id)
-        if doc:
-            total_views = doc.get('total_views', 1) + 1
-            total_reports = doc.get('total_reports', 0) + increment_reports
-            percentage = (total_reports / total_views) * 100
-            if percentage > 40:
-                db.collection('articles').document(article_id).update({"community_flagged": True})
-            return jsonify({"status": "feedback_recorded", "percentage_reported": f"{percentage:.0f}%"})
+        total_views = doc.get('total_views', 1)
+        total_reports = doc.get('total_reports', 0)
+        percentage = (total_reports / total_views) * 100
+
+        if percentage > 40:
+            doc_ref.update({"community_flagged": True})
+
+        return jsonify({
+            "status": "feedback_recorded",
+            "percentage_reported": f"{percentage:.0f}%"
+        }), 200
 
     if label != "FAKE":
-        return jsonify({"status": "ignored", "message": "Only FAKE labels are stored in legacy mode"}), 200
+        return jsonify({
+            "status": "ignored",
+            "message": "Only FAKE labels are stored when new text appears"
+        }), 200
 
     result = store_feedback(text, explanation, sources, user_fingerprint)
-    print("Final result is", result)
+
     if "error" in result:
         return jsonify({"error": result["error"]}), 400
-    return jsonify(result), 200
 
+    return jsonify(result), 200
 
 # ---------------------------
 # SESSION MANAGEMENT

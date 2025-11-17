@@ -588,8 +588,6 @@
         <li onclick="showPage('home')" class="active" data-page="home">Home</li>
         <li onclick="showPage('problem')" data-page="problem">Why This?</li>
         <li onclick="showPage('architecture')" data-page="architecture">How It Works</li>
-        <li onclick="showPage('project')" data-page="project">Get Started</li>
-        <li onclick="showPage('setup')" data-page="setup">API Setup (Optional)</li>
       </ul>
     </div>
   </nav>
@@ -605,7 +603,7 @@
           TrustMeter combines <strong>5 AI models</strong>, and <strong>semantic caching</strong> 
           to verify text, detect fake images, and score website credibility — instantly.
         </p>
-        <button class="cta-button" onclick="showPage('project')">📥 Download Extension</button>
+        <button class="cta-button" onclick="downloadExtension1()">📥 Download Extension</button>
         
         <div style="margin-top: 2rem;">
           <span class="tech-badge">🤖 Gemini AI</span>
@@ -1007,7 +1005,6 @@
     </div>
   </div>
 
-  <!-- PROJECT PAGE -->
   <div id="project" class="page">
     <div class="container">
       <div class="hero">
@@ -1523,8 +1520,6 @@
 
   <footer>
     <p style="font-size: 1.2rem; font-weight: 600;">🛡️ TrustMeter - AI-Powered Truth Verification</p>
-    <p style="margin-top: 0.8rem; font-size: 1rem;">Built for the <strong>GenAI Hackathon</strong> | Team IPV3 | 2025</p>
-    <p style="margin-top: 0.5rem; color: #888;">🎯 Problem Statement: Combating Misinformation in Real-Time</p>
     <p style="margin-top: 1.5rem; font-size: 0.95rem; max-width: 700px; margin-left: auto; margin-right: auto; line-height: 1.7;">
       Empowering users to navigate the digital world with confidence and clarity through cutting-edge AI technology.
     </p>
@@ -1534,6 +1529,7 @@
       <span class="tech-badge">🔒 Privacy-First</span>
       <span class="tech-badge">🌐 Open Source</span>
     </div>
+    <a href="privacy.html" style="color: #ccc; font-size: larger;">Privacy Policy</a>
   </footer>
 
   <script>
@@ -1562,8 +1558,13 @@
     // Download Extension
     function downloadExtension() {
       // Update with your actual GitHub release link
-      window.location.href = "https://github.com/akshaynair5/H2S_hackathon/archive/refs/heads/main.zip";
+      window.location.href = "https://github.com/akshaynair5/TrustMeter/archive/refs/heads/main.zip";
     }
+
+    function downloadExtension1() {
+      window.location.href = "https://chromewebstore.google.com/detail/nkkckneeocjfbmhadefiekajfnbmhgka?utm_source=item-share-cb";
+    }
+
 
     // Video Modal Functions
     function openModal(videoSrc, title, description) {
